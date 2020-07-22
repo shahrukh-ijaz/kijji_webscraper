@@ -1,6 +1,7 @@
 import scrapy
 import re
 from datetime import datetime
+from datetime import date
 
 class FastSearchSpider(scrapy.Spider):
     name = "kijji"
@@ -21,15 +22,37 @@ class FastSearchSpider(scrapy.Spider):
 
     def parse_ads(self, response):
         links = response.xpath("//div[@class='title']/a/@href").extract()
+        dates = response.xpath("//span[@class='date-posted']/text()").extract()
+        # stop_flag = False
+
+        i = -1
         for link in links:
+            i += 1
+
+            today = datetime.today()
+
+            if 'ago' not in dates[i]:
+                ad_date = datetime.strptime(dates[i], "%d/%m/%Y")
+                
+                if (today-ad_date).days > 7:
+                    stop_flag = True
+                    continue
+            # else:
+            #     print("found ad in range")
+            
             yield response.follow(
                 url=link,
-                callback=self.parse_product
+                callback=self.parse_product,
+                meta={
+                    'date': dates[i]
+                }
             )
 
+        # if not stop_flag:
+            # print("stop flag")
         next_btn = response.xpath("//a[@title='Next']/@href").extract_first()
         if next_btn:
-             yield response.follow(
+            yield response.follow(
                 url=next_btn,
                 callback=self.parse_ads,
             )
@@ -50,7 +73,9 @@ class FastSearchSpider(scrapy.Spider):
         match = re.search(r'[\w\.-]+@[\w\.-]+', description)
         if match:
             email = match.group(0)
-        
+        else:
+            return
+
         yield {
             'email': email,
             'title': title,
